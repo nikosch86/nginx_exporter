@@ -11,7 +11,8 @@ import (
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/log"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/log"
 )
 
 const (
@@ -167,7 +168,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	e.mutex.Lock() // To protect metrics from concurrent collects.
 	defer e.mutex.Unlock()
 	if err := e.collect(ch); err != nil {
-		log.Printf("Error scraping nginx: %s", err)
+		log.Errorf("Error scraping nginx: %s", err)
 		e.scrapeFailures.Inc()
 		e.scrapeFailures.Collect(ch)
 	}
@@ -182,8 +183,8 @@ func main() {
 	exporter := NewExporter(*nginxScrapeURI)
 	prometheus.MustRegister(exporter)
 
-	log.Printf("Starting Server: %s", *listeningAddress)
-	http.Handle(*metricsEndpoint, prometheus.Handler())
+	log.Infof("Starting Server: %s", *listeningAddress)
+	http.Handle(*metricsEndpoint, promhttp.Handler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html>
 			<head><title>Nginx Exporter</title></head>
@@ -193,6 +194,9 @@ func main() {
 			</body>
 			</html>`))
 	})
-
+	http.HandleFunc("/-/healthy", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	})
 	log.Fatal(http.ListenAndServe(*listeningAddress, nil))
 }
